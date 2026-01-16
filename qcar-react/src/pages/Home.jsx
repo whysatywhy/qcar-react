@@ -1,39 +1,115 @@
 import { useRef, useState, useEffect, useLayoutEffect } from 'react';
-import { motion, useScroll, useTransform, useSpring } from 'framer-motion';
+import { motion, useScroll, useTransform, useSpring, AnimatePresence } from 'framer-motion';
 import logo from '../assets/image.png';
 
-const Letter = ({ char, index, isInitial, totalIndex, scrollYProgress }) => {
-    // Random scatter for non-initials
-    const randomX = (Math.random() - 0.5) * 800;
-    const randomY = (Math.random() - 0.5) * 800;
-    const randomRotate = (Math.random() - 0.5) * 360;
-
-    let targetX = 0;
-    let targetY = 0; // Center vertical
-
-    if (isInitial) {
-        const slotMap = { 'Q': -120, 'C': -40, 'A': 40, 'R': 120 };
+// Content for the initials
+const qcarData = {
+    'Q': {
+        title: 'Quantum',
+        description: 'Exploring the fundamental principles of quantum mechanics to revolutionize computation. We investigate superposition, entanglement, and quantum interference to build systems that surpass classical limits.'
+    },
+    'C': {
+        title: 'Computing',
+        description: 'Developing next-generation computational architectures. Our work focuses on fault-tolerant quantum computing, error correction, and scalable qubit systems.'
+    },
+    'A': {
+        title: 'Algorithms',
+        description: 'Designing efficient algorithms for quantum hardware. From Grover\'s search to Shor\'s factorization, we pioneer new methods to solve intractable problems in cryptography and optimization.'
+    },
+    'R': {
+        title: 'Research',
+        description: 'Pushing the boundaries of scientific discovery. Our interdisciplinary team bridges physics, computer science, and mathematics to advance the state of the art in quantum technology.'
     }
+};
 
-    // For non-initials:
-    const xScatter = useTransform(scrollYProgress, [0, 0.4], [0, randomX]);
-    const yScatter = useTransform(scrollYProgress, [0, 0.4], [0, randomY]);
-    const opacityScatter = useTransform(scrollYProgress, [0, 0.2], [1, 0]);
-    const rotateScatter = useTransform(scrollYProgress, [0, 0.4], [0, randomRotate]);
+const InfoModal = ({ letter, onClose }) => {
+    if (!letter || !qcarData[letter]) return null;
+    const { title, description } = qcarData[letter];
 
     return (
-        <motion.span
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
             style={{
-                display: 'inline-block',
-                x: isInitial ? 0 : xScatter,
-                y: isInitial ? 0 : yScatter,
-                opacity: isInitial ? 1 : opacityScatter,
-                rotate: isInitial ? 0 : rotateScatter
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0,0,0,0.8)',
+                backdropFilter: 'blur(5px)',
+                zIndex: 1000,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '20px'
             }}
         >
-            {char}
-        </motion.span>
+            <motion.div
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                    background: '#0a0a0a',
+                    border: '1px solid #89a783',
+                    borderRadius: '16px',
+                    padding: '40px',
+                    maxWidth: '500px',
+                    width: '100%',
+                    position: 'relative',
+                    boxShadow: '0 0 30px rgba(137, 167, 131, 0.2)'
+                }}
+            >
+                <button
+                    onClick={onClose}
+                    style={{
+                        position: 'absolute',
+                        top: '20px',
+                        right: '20px',
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#666',
+                        fontSize: '24px',
+                        cursor: 'pointer'
+                    }}
+                >
+                    &times;
+                </button>
+                <div style={{
+                    fontSize: '4rem',
+                    fontWeight: 'bold',
+                    color: '#89a783',
+                    marginBottom: '10px',
+                    lineHeight: 1
+                }}>
+                    {letter}
+                </div>
+                <h2 style={{
+                    fontSize: '2rem',
+                    color: '#fff',
+                    marginBottom: '1rem',
+                    fontFamily: 'var(--font-main)'
+                }}>
+                    {title}
+                </h2>
+                <p style={{
+                    color: '#ccc',
+                    lineHeight: 1.6,
+                    fontSize: '1.1rem'
+                }}>
+                    {description}
+                </p>
+            </motion.div>
+        </motion.div>
     );
+};
+
+const Letter = ({ char, index, isInitial, totalIndex, scrollYProgress }) => {
+    // Unused in current impl, kept for ref if needed
+    return <span>{char}</span>;
 };
 
 // Words configuration
@@ -53,7 +129,7 @@ const qcarMap = [
     { wordIndex: 3, charIndex: 0 }  // R
 ];
 
-const AnimatedWord = ({ word, wordIndex, scrollYProgress }) => {
+const AnimatedWord = ({ word, wordIndex, scrollYProgress, onInitialClick }) => {
     return (
         <span style={{ display: 'inline-block', whiteSpace: 'nowrap', marginRight: '0.4em' }}>
             {word.split('').map((char, charIndex) => {
@@ -66,6 +142,7 @@ const AnimatedWord = ({ word, wordIndex, scrollYProgress }) => {
                         isInitial={isTargetInitial}
                         initialPos={wordIndex} // 0=Q, 1=C, 2=A, 3=R used for ordering QCAR
                         scrollYProgress={scrollYProgress}
+                        onClick={isTargetInitial ? () => onInitialClick(char) : undefined}
                     />
                 );
             })}
@@ -74,7 +151,7 @@ const AnimatedWord = ({ word, wordIndex, scrollYProgress }) => {
 };
 
 
-const LetterWrapper = ({ char, isInitial, initialPos, scrollYProgress }) => {
+const LetterWrapper = ({ char, isInitial, initialPos, scrollYProgress, onClick }) => {
     const spanRef = useRef(null);
     const [delta, setDelta] = useState({ x: 0, y: 0 });
     // Non-initials scatter
@@ -145,6 +222,9 @@ const LetterWrapper = ({ char, isInitial, initialPos, scrollYProgress }) => {
         return (
             <motion.span
                 ref={spanRef}
+                onClick={onClick}
+                whileHover={{ scale: 1.3, zIndex: 50, color: '#c5e0bf', cursor: 'pointer' }}
+                whileTap={{ scale: 0.95 }}
                 style={{
                     display: 'inline-block',
                     x: xConverge,
@@ -152,7 +232,8 @@ const LetterWrapper = ({ char, isInitial, initialPos, scrollYProgress }) => {
                     color: color,
                     scale: scale,
                     zIndex: 20,
-                    position: 'relative'
+                    position: 'relative',
+                    cursor: 'pointer'
                 }}
             >
                 {char}
@@ -182,9 +263,11 @@ const Home = () => {
         offset: ["start start", "end end"]
     });
 
+    const [selectedLetter, setSelectedLetter] = useState(null);
+
     const isMobile = window.innerWidth < 768;
-    const logoSize = isMobile ? '100px' : '150px'; // Increased size
-    const logoOffset = isMobile ? '-130px' : '-200px'; // Adjusted offset for larger logo
+    const logoSize = isMobile ? '100px' : '150px';
+    const logoOffset = isMobile ? '-130px' : '-200px';
 
     return (
         <div ref={containerRef} style={{ height: '300vh', position: 'relative' }}>
@@ -228,12 +311,12 @@ const Home = () => {
                     flexDirection: 'column',
                     alignItems: 'flex-start'
                 }}>
-                    <AnimatedWord word="Quantum" wordIndex={0} scrollYProgress={scrollYProgress} />
-                    <AnimatedWord word="Computing" wordIndex={1} scrollYProgress={scrollYProgress} />
-                    <AnimatedWord word="Algorithms" wordIndex={2} scrollYProgress={scrollYProgress} />
+                    <AnimatedWord word="Quantum" wordIndex={0} scrollYProgress={scrollYProgress} onInitialClick={setSelectedLetter} />
+                    <AnimatedWord word="Computing" wordIndex={1} scrollYProgress={scrollYProgress} onInitialClick={setSelectedLetter} />
+                    <AnimatedWord word="Algorithms" wordIndex={2} scrollYProgress={scrollYProgress} onInitialClick={setSelectedLetter} />
                     <div style={{ display: 'flex' }}>
-                        <AnimatedWord word="Research" wordIndex={3} scrollYProgress={scrollYProgress} />
-                        <AnimatedWord word="Group" wordIndex={4} scrollYProgress={scrollYProgress} />
+                        <AnimatedWord word="Research" wordIndex={3} scrollYProgress={scrollYProgress} onInitialClick={setSelectedLetter} />
+                        <AnimatedWord word="Group" wordIndex={4} scrollYProgress={scrollYProgress} onInitialClick={setSelectedLetter} />
                     </div>
                 </h1>
 
@@ -259,7 +342,7 @@ const Home = () => {
                 <motion.div
                     style={{
                         position: 'absolute',
-                        top: '55%', // Moved up from 60% to decrease space
+                        top: '55%', /* Adjusted spacing */
                         left: 0,
                         right: 0,
                         textAlign: 'center',
@@ -280,6 +363,13 @@ const Home = () => {
 
             {/* Scroll indicator or spacing filler */}
             <div style={{ height: '200vh' }}></div>
+
+            {/* Info Modal */}
+            <AnimatePresence>
+                {selectedLetter && (
+                    <InfoModal letter={selectedLetter} onClose={() => setSelectedLetter(null)} />
+                )}
+            </AnimatePresence>
         </div>
     );
 };

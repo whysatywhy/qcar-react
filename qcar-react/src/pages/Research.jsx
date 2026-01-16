@@ -1,7 +1,5 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import SidePanel from '../components/SidePanel';
-import ConnectionWire from '../components/ConnectionWire';
 import useIsMobile from '../hooks/useIsMobile';
 
 const papers = [
@@ -37,49 +35,112 @@ const papers = [
     }
 ];
 
-const ResearchCard = ({ paper, index, setActivePaper, setCoords, isMobile }) => {
-    const cardRef = useRef(null);
-    const [expanded, setExpanded] = useState(false);
-
-    const handleMouseEnter = () => {
-        if (isMobile) return;
-        setActivePaper({
-            name: paper.title,
-            role: `${paper.journal}, ${paper.year}`,
-            description: paper.abstract
-        });
-
-        if (cardRef.current) {
-            const rect = cardRef.current.getBoundingClientRect();
-            setCoords({
-                x: rect.left + rect.width / 2,
-                y: rect.top + rect.height / 2
-            });
-        }
-    };
-
-    const handleMouseLeave = () => {
-        if (isMobile) return;
-        setActivePaper(null);
-        setCoords(null);
-    };
-
-    const handleClick = () => {
-        if (isMobile) {
-            setExpanded(!expanded);
-        }
-    };
+const ResearchModal = ({ paper, onClose }) => {
+    if (!paper) return null;
 
     return (
         <motion.div
-            ref={cardRef}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0,0,0,0.85)',
+                backdropFilter: 'blur(8px)',
+                zIndex: 1000,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '20px'
+            }}
+        >
+            <motion.div
+                initial={{ scale: 0.9, y: 30 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 30 }}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                    background: '#0a0a0a',
+                    border: '1px solid #89a783',
+                    borderRadius: '16px',
+                    padding: '50px', // Bigger padding for "bigger" feel
+                    maxWidth: '800px', // Wider max-width
+                    width: '100%',
+                    position: 'relative',
+                    boxShadow: '0 0 40px rgba(137, 167, 131, 0.3)'
+                }}
+            >
+                <button
+                    onClick={onClose}
+                    style={{
+                        position: 'absolute',
+                        top: '25px',
+                        right: '25px',
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#666',
+                        fontSize: '28px',
+                        cursor: 'pointer'
+                    }}
+                >
+                    &times;
+                </button>
+
+                <div style={{
+                    fontSize: '1rem',
+                    color: '#89a783',
+                    marginBottom: '1rem',
+                    opacity: 0.8,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em'
+                }}>
+                    {paper.journal}, {paper.year}
+                </div>
+
+                <h2 style={{
+                    fontSize: '2.5rem',
+                    color: '#fff',
+                    marginBottom: '2rem',
+                    fontFamily: 'var(--font-main)',
+                    lineHeight: 1.2
+                }}>
+                    {paper.title}
+                </h2>
+                <div style={{
+                    width: '60px',
+                    height: '3px',
+                    background: '#89a783',
+                    marginBottom: '2rem'
+                }} />
+                <p style={{
+                    color: '#ddd',
+                    lineHeight: 1.8,
+                    fontSize: '1.2rem'
+                }}>
+                    {paper.abstract}
+                </p>
+                <div style={{ marginTop: '2rem', fontSize: '0.9rem', color: '#666' }}>
+                    * Click anywhere outside to close
+                </div>
+            </motion.div>
+        </motion.div>
+    );
+};
+
+const ResearchCard = ({ paper, index, onClick }) => {
+    return (
+        <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.2 + index * 0.1 }}
+            whileHover={{ scale: 1.02 }} // Simple zoom effect
+            transition={{ duration: 0.3 }}
             className="card-glow-wrapper"
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
-            onClick={handleClick}
+            onClick={() => onClick(paper)}
             style={{
                 marginBottom: '1.5rem',
                 cursor: 'pointer'
@@ -90,22 +151,7 @@ const ResearchCard = ({ paper, index, setActivePaper, setCoords, isMobile }) => 
                 borderLeft: '2px solid transparent'
             }}>
                 <h2 style={{ fontSize: '1.2rem', margin: '0 0 0.5rem', color: '#fff' }}>{paper.title}</h2>
-                <div style={{ fontSize: '0.9rem', opacity: 0.6, color: '#89a783', marginBottom: expanded ? '0.5rem' : '0' }}>{paper.journal}, {paper.year}</div>
-
-                <AnimatePresence>
-                    {isMobile && expanded && (
-                        <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            style={{ overflow: 'hidden' }}
-                        >
-                            <p style={{ fontSize: '0.9rem', opacity: 0.8, lineHeight: 1.6, marginTop: '1rem', color: '#fff', borderTop: '1px solid rgba(100,255,218,0.2)', paddingTop: '1rem' }}>
-                                {paper.abstract}
-                            </p>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                <div style={{ fontSize: '0.9rem', opacity: 0.6, color: '#89a783' }}>{paper.journal}, {paper.year}</div>
             </div>
         </motion.div>
     );
@@ -113,23 +159,10 @@ const ResearchCard = ({ paper, index, setActivePaper, setCoords, isMobile }) => 
 
 const Research = () => {
     const [activePaper, setActivePaper] = useState(null);
-    const [coords, setCoords] = useState(null);
     const isMobile = useIsMobile();
-
-    const endCoords = {
-        x: typeof window !== 'undefined' ? window.innerWidth - 400 : 0,
-        y: typeof window !== 'undefined' ? window.innerHeight / 2 : 0
-    };
 
     return (
         <div style={{ padding: '150px 10vw 50px' }}>
-            {!isMobile && (
-                <>
-                    <ConnectionWire start={coords} end={endCoords} active={!!activePaper} />
-                    <SidePanel profile={activePaper} isOpen={!!activePaper} />
-                </>
-            )}
-
             <motion.h1
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -150,12 +183,16 @@ const Research = () => {
                         key={i}
                         paper={paper}
                         index={i}
-                        setActivePaper={setActivePaper}
-                        setCoords={setCoords}
-                        isMobile={isMobile}
+                        onClick={setActivePaper}
                     />
                 ))}
             </div>
+
+            <AnimatePresence>
+                {activePaper && (
+                    <ResearchModal paper={activePaper} onClose={() => setActivePaper(null)} />
+                )}
+            </AnimatePresence>
         </div>
     );
 };
