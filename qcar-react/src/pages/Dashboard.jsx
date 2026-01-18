@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   MessageSquare, Calendar, FolderKanban, FileText, ShieldCheck, 
-  Clock, Heart, Send, User, LogOut, Video, Gamepad2, X, CheckSquare, Radio
+  Clock, Heart, Send, User, LogOut, Video, Gamepad2, X, CheckSquare, Radio, Circle
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-// 1. Import your Supabase client
 import { supabase } from '../lib/supabase'; 
 
 const AppBox = ({ children, title, icon: Icon, span = "col-span-1", className = "" }) => (
@@ -24,68 +23,57 @@ export default function App() {
   const [userName, setUserName] = useState("Alex");
   const [time, setTime] = useState(new Date());
   
-  // --- Live Supabase States ---
+  // --- Master States ---
   const [project, setProject] = useState({ name: "Genesis", progress: 84, broadcast: "System Stable" });
   const [messages, setMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [tasks, setTasks] = useState([]);
+  const [gameData, setGameData] = useState({ battleship: Array(25).fill(null), ttt: Array(9).fill(null) });
+
   const chatEndRef = useRef(null);
 
-  // 2. Load Initial Data & Setup Real-time Subscriptions
+  // --- 1. THE MASTER LISTENER ---
   useEffect(() => {
     if (!isLoggedIn) return;
 
     const fetchData = async () => {
-      // Fetch Project State
       const { data: state } = await supabase.from('bento_state').select('*').single();
-      if (state) setProject({ name: state.project_name, progress: state.progress_percent, broadcast: state.broadcast_message });
-
-      // Fetch Tasks
       const { data: taskList } = await supabase.from('bento_tasks').select('*').order('id', { ascending: true });
-      if (taskList) setTasks(taskList);
-
-      // Fetch Chat (Last 20 messages)
       const { data: chatLogs } = await supabase.from('bento_chat').select('*').order('created_at', { ascending: true }).limit(20);
+      const { data: session } = await supabase.from('game_sessions').select('*').single();
+
+      if (state) setProject({ name: state.project_name, progress: state.progress_percent, broadcast: state.broadcast_message });
+      if (taskList) setTasks(taskList);
       if (chatLogs) setMessages(chatLogs);
+      if (session) setGameData(session.board_state);
     };
 
     fetchData();
 
-    // 3. THE MAGIC: Real-time Channel
-    const channel = supabase.channel('bento-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bento_state' }, (payload) => {
-        setProject({ name: payload.new.project_name, progress: payload.new.progress_percent, broadcast: payload.new.broadcast_message });
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bento_tasks' }, fetchData)
+    const masterChannel = supabase.channel('dashboard-sync')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bento_chat' }, (payload) => {
         setMessages(prev => [...prev, payload.new]);
       })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bento_state' }, (payload) => {
+        setProject({ name: payload.new.project_name, progress: payload.new.progress_percent, broadcast: payload.new.broadcast_message });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bento_tasks' }, fetchData)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_sessions' }, (payload) => {
+        setGameData(payload.new.board_state);
+      })
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    return () => supabase.removeChannel(masterChannel);
   }, [isLoggedIn]);
 
-  // UI Helpers
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  // --- 2. GAME LOGIC ---
+  const handleGameMove = async (gameType, index, value) => {
+    const newBoard = { ...gameData };
+    newBoard[gameType][index] = value;
+    await supabase.from('game_sessions').update({ board_state: newBoard }).eq('game_type', 'multiplayer_hub');
+  };
 
-  useEffect(() => {
-    const timer = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const welcomeMessage = useMemo(() => {
-    const hr = new Date().getHours();
-    const greets = [
-      ["Night shift starts.", "The code never sleeps."], ["Dawn of Genesis.", "Morning, Architect."],
-      ["Deep work active.", "Morning Sprint."], ["Mid-day Momentum.", "Afternoon grind."],
-      ["Evening Refactor.", "Golden hour sync."], ["Night mode on.", "Midnight Oil."]
-    ];
-    return `${greets[Math.floor(hr / 4)][Math.floor(Math.random() * 2)]}, ${userName}`;
-  }, [isLoggedIn]);
-
-  // --- Database Actions ---
+  // --- 3. UI HELPERS ---
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
@@ -114,23 +102,24 @@ export default function App() {
       {/* HEADER */}
       <div className="max-w-7xl mx-auto mb-10 flex justify-between items-end">
         <div>
-          <h1 className="text-white text-4xl font-light tracking-tighter">{welcomeMessage}</h1>
+          <h1 className="text-white text-3xl font-light tracking-tighter">Welcome, {userName}</h1>
           <div className="flex items-center gap-2 mt-2 italic">
             <Radio size={12} className="text-emerald-500 animate-pulse" />
-            <p className="text-zinc-600 text-[10px] font-mono uppercase tracking-[0.2em]">Broadcast: {project.broadcast}</p>
+            <p className="text-zinc-600 text-[10px] font-mono uppercase tracking-[0.2em]">Live: {project.broadcast}</p>
           </div>
         </div>
         <button onClick={() => setIsLoggedIn(false)} className="p-4 bg-[#0d0d0d] border border-zinc-800 rounded-3xl text-zinc-600 hover:text-white transition"><LogOut size={20} /></button>
       </div>
 
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-4 auto-rows-[220px]">
-        {/* PROJECT TILE */}
+        
+        {/* PROJECT DASH */}
         <AppBox title="Project Focus" icon={FolderKanban} span="md:col-span-2 md:row-span-2">
           <div className="mt-6 flex flex-col h-full justify-between">
             <h2 className="text-6xl font-thin text-white tracking-tighter italic">{project.name}</h2>
             <div className="mb-6">
               <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">
-                <span>Deployment Status</span>
+                <span>Progress</span>
                 <span className="text-white">{project.progress}%</span>
               </div>
               <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden">
@@ -140,7 +129,22 @@ export default function App() {
           </div>
         </AppBox>
 
-        {/* CHAT TILE */}
+        {/* BATTLESHIP GAME */}
+        <AppBox title="Battleship" icon={Gamepad2} span="md:col-span-1 md:row-span-2">
+          <div className="grid grid-cols-5 gap-1 h-full pb-4">
+            {gameData.battleship.map((cell, i) => (
+              <div 
+                key={i} 
+                onClick={() => handleGameMove('battleship', i, 'hit')}
+                className={`border border-white/5 rounded-lg flex items-center justify-center cursor-pointer transition ${cell === 'hit' ? 'bg-red-500/20 text-red-500' : 'hover:bg-white/5'}`}
+              >
+                {cell === 'hit' ? '●' : ''}
+              </div>
+            ))}
+          </div>
+        </AppBox>
+
+        {/* MESSENGER */}
         <AppBox title="Messenger" icon={MessageSquare} span="md:col-span-1 md:row-span-2">
           <div className="flex flex-col h-full text-[11px]">
             <div className="flex-1 overflow-y-auto space-y-3 mb-4 pr-2 custom-scrollbar">
@@ -159,7 +163,22 @@ export default function App() {
           </div>
         </AppBox>
 
-        {/* CHECKLIST TILE */}
+        {/* TIC TAC TOE */}
+        <AppBox title="Tic-Tac-Toe" icon={Gamepad2}>
+          <div className="grid grid-cols-3 gap-1 h-full">
+            {gameData.ttt.map((cell, i) => (
+              <div 
+                key={i} 
+                onClick={() => handleGameMove('ttt', i, userName === 'Alex' ? 'X' : 'O')}
+                className="border border-white/5 rounded-lg flex items-center justify-center text-xs hover:bg-white/5 cursor-pointer"
+              >
+                {cell}
+              </div>
+            ))}
+          </div>
+        </AppBox>
+
+        {/* CHECKLIST */}
         <AppBox title="Checklist" icon={CheckSquare} span="md:col-span-1 md:row-span-2">
           <div className="space-y-3">
             {tasks.map(t => (
@@ -173,17 +192,12 @@ export default function App() {
           </div>
         </AppBox>
 
-        {/* UTILITY TILES */}
-        <AppBox title="Meeting" icon={Video}>
-          <button onClick={() => window.open('https://meet.google.com/new', '_blank')} className="w-full h-full bg-zinc-900 border border-white/5 rounded-2xl flex flex-col items-center justify-center gap-2 hover:bg-white hover:text-black transition">
-            <Video size={20} /><span className="text-[9px] font-bold uppercase">Launch Meet</span>
-          </button>
-        </AppBox>
+        {/* UTILITIES */}
         <AppBox title="Vault" icon={ShieldCheck}><div className="text-[10px] opacity-50">Syncing files...</div></AppBox>
-        <AppBox title="Clock" icon={Clock} className="flex items-center justify-center text-3xl font-mono text-white">
+        <AppBox title="System Sync" icon={Clock} className="flex items-center justify-center text-3xl font-mono text-white">
           {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </AppBox>
-        <AppBox title="Mood" icon={Heart} className="flex items-center justify-center text-4xl"><motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity }}>🌵</motion.div></AppBox>
+
       </div>
     </div>
   );
