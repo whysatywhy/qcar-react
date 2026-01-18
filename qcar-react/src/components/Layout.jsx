@@ -14,7 +14,7 @@ const Layout = () => {
             <main style={{ position: 'relative', zIndex: 1 }}>
                 <Outlet />
             </main>
-            <Footer />
+            {/* <Footer /> */}
         </>
     );
 };

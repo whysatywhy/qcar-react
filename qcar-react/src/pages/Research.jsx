@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useScroll, useTransform, useSpring } from 'framer-motion';
 import useIsMobile from '../hooks/useIsMobile';
 
 const papers = [
@@ -32,6 +32,12 @@ const papers = [
         journal: "Reviews of Modern Physics",
         year: "2025",
         abstract: "A comprehensive review of the current state of Majorana-based qubits. We discuss recent experimental evidence in nanowire systems and the challenges remaining for braiding operations."
+    },
+    {
+        title: "Hybrid Quantum-Classical Neural Networks",
+        journal: "NeurIPS",
+        year: "2024",
+        abstract: "Proposing a new architecture for training hybrid models. We show that delegating specific layers to a quantum processor can accelerate convergence on non-convex loss landscapes."
     }
 ];
 
@@ -68,8 +74,8 @@ const ResearchModal = ({ paper, onClose }) => {
                     background: '#0a0a0a',
                     border: '1px solid #89a783',
                     borderRadius: '16px',
-                    padding: '50px', // Bigger padding for "bigger" feel
-                    maxWidth: '800px', // Wider max-width
+                    padding: '50px',
+                    maxWidth: '800px',
                     width: '100%',
                     position: 'relative',
                     boxShadow: '0 0 40px rgba(137, 167, 131, 0.3)'
@@ -132,57 +138,169 @@ const ResearchModal = ({ paper, onClose }) => {
     );
 };
 
-const ResearchCard = ({ paper, index, onClick }) => {
+const RotatingCard = ({ paper, index, total, scrollYProgress, onClick }) => {
+    // Determine the "active" float index from scroll
+    const activeIndex = useTransform(scrollYProgress, [0, 1], [0, total - 1]);
+
+    // Smooth the active index for fluid movement
+    const smoothIndex = useSpring(activeIndex, { stiffness: 50, damping: 20 });
+
+    // Calculate this card's offset from the active index
+    const offset = useTransform(smoothIndex, (current) => index - current);
+
+    // Rotation: Fan out from Bottom Center
+    const rotate = useTransform(offset, (o) => {
+        return o * 15; // 0 degrees at center, fanning out 15deg per unit
+    });
+
+    const opacity = useTransform(smoothIndex, (current) => {
+        const dist = Math.abs(current - index);
+        // Fade out neighbors stronger to focus on center
+        if (dist < 0.5) return 1;
+        return Math.max(0.3, 1 - dist * 0.5);
+    });
+
+    const scale = useTransform(offset, (o) => {
+        const dist = Math.abs(o);
+        return 1 - dist * 0.1;
+    });
+
+    const zIndex = useTransform(offset, (o) => {
+        return 100 - Math.round(Math.abs(o));
+    });
+
     return (
         <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            whileHover={{ scale: 1.02 }} // Simple zoom effect
-            transition={{ duration: 0.3 }}
-            className="card-glow-wrapper"
-            onClick={() => onClick(paper)}
             style={{
-                marginBottom: '1.5rem',
-                cursor: 'pointer'
+                position: 'absolute',
+                left: '50%',
+                top: '50%',
+                width: '320px',  // Smaller width
+                height: '460px', // Smaller height
+                transformOrigin: '50% 250%', // Pivot far below center
+                x: '-50%',
+                y: '-50%',
+                rotate,
+                scale,
+                opacity,
+                zIndex,
+                cursor: 'pointer',
+                background: 'rgba(5, 5, 5, 0.9)', // Darker card background for contrast
+                backdropFilter: 'blur(10px)',
+                borderRadius: '30px',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                overflow: 'hidden',
+                padding: '2rem',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                boxShadow: '0 20px 50px rgba(0,0,0,0.5)'
+            }}
+            onClick={() => onClick(paper)}
+            whileHover={{
+                scale: 1.05,
+                borderColor: 'rgba(137, 167, 131, 0.8)'
             }}
         >
-            <div className="card-content" style={{
-                padding: '1.5rem',
-                borderLeft: '2px solid transparent'
+            <div>
+                <div style={{
+                    fontSize: '0.8rem',
+                    opacity: 0.8,
+                    color: '#89a783',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    marginBottom: '0.5rem'
+                }}>
+                    {paper.journal}, {paper.year}
+                </div>
+                <h2 style={{
+                    fontSize: '1.6rem', // Slightly smaller text
+                    marginBottom: '1rem',
+                    color: '#fff',
+                    lineHeight: 1.2
+                }}>
+                    {paper.title}
+                </h2>
+            </div>
+
+            <div style={{
+                fontSize: '0.95rem',
+                color: 'rgba(255,255,255,0.7)',
+                lineHeight: 1.5,
+                display: '-webkit-box',
+                WebkitLineClamp: 5,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden'
             }}>
-                <h2 style={{ fontSize: '1.2rem', margin: '0 0 0.5rem', color: '#fff' }}>{paper.title}</h2>
-                <div style={{ fontSize: '0.9rem', opacity: 0.6, color: '#89a783' }}>{paper.journal}, {paper.year}</div>
+                {paper.abstract}
             </div>
         </motion.div>
     );
 };
 
 const Research = () => {
+    const targetRef = useRef(null);
+    const { scrollYProgress } = useScroll({
+        target: targetRef,
+    });
+
     const [activePaper, setActivePaper] = useState(null);
     const isMobile = useIsMobile();
 
-    return (
-        <div style={{ padding: '150px 10vw 50px' }}>
-            <motion.h1
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 1 }}
-                style={{ fontSize: '3rem', marginBottom: '2rem', fontWeight: 'bold' }}
-            >
-                Research
-            </motion.h1>
+    // If mobile, fallback to vertical list
+    if (isMobile) {
+        return (
+            <div style={{ padding: '120px 20px 50px' }}>
+                <h1 style={{ fontSize: '2.5rem', marginBottom: '2rem', fontWeight: 'bold' }}>Research</h1>
+                {papers.map((paper, i) => (
+                    <div key={i} style={{ marginBottom: '1.5rem', background: 'rgba(255,255,255,0.03)', padding: '1.5rem', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <h2 style={{ fontSize: '1.2rem', color: '#fff' }}>{paper.title}</h2>
+                        <div style={{ fontSize: '0.9rem', color: '#89a783', marginTop: '0.5rem' }}>{paper.journal}</div>
+                    </div>
+                ))}
+                <AnimatePresence>
+                    {activePaper && <ResearchModal paper={activePaper} onClose={() => setActivePaper(null)} />}
+                </AnimatePresence>
+            </div>
+        );
+    }
 
-            <div style={{ marginTop: '2rem', maxWidth: '800px' }}>
-                <p style={{ maxWidth: '600px', lineHeight: 1.6, opacity: 0.8, marginBottom: '3rem' }}>
-                    Our group is dedicated to pushing the boundaries of what's physically possible in computation.
-                    From theoretical complexity classes to practical hardware implementation.
-                </p>
+    return (
+        <section ref={targetRef} style={{ height: '400vh', position: 'relative' }}>
+            <div style={{
+                position: 'sticky',
+                top: 0,
+                height: '100vh',
+                width: '100vw',
+                overflow: 'hidden',
+                perspective: '1000px',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center'
+            }}>
+                {/* Fixed Title Background */}
+                <div style={{ position: 'absolute', top: '8vh', left: '5vw', zIndex: 10, pointerEvents: 'none' }}>
+                    <h4 style={{
+                        fontSize: '2rem',
+                        fontWeight: 'bold',
+                        opacity: 1,
+                        color: '#fff',
+                        letterSpacing: '0.05em',
+                        borderLeft: '4px solid #89a783',
+                        paddingLeft: '1rem',
+                        lineHeight: 1
+                    }}>
+                        RESEARCH
+                    </h4>
+                </div>
 
                 {papers.map((paper, i) => (
-                    <ResearchCard
+                    <RotatingCard
                         key={i}
                         paper={paper}
                         index={i}
+                        total={papers.length}
+                        scrollYProgress={scrollYProgress}
                         onClick={setActivePaper}
                     />
                 ))}
@@ -193,7 +311,7 @@ const Research = () => {
                     <ResearchModal paper={activePaper} onClose={() => setActivePaper(null)} />
                 )}
             </AnimatePresence>
-        </div>
+        </section>
     );
 };
 

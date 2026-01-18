@@ -9,11 +9,11 @@ const RippleBackground = () => {
         const ctx = canvas.getContext('2d');
         let animationFrameId;
 
-        const DOT_SPACING = 5;
-        const DOT_RADIUS = 0.8;
+        const DOT_SPACING = 12; // Increased from 5 for performance
+        const DOT_RADIUS = 1.2; // Increased size slightly
         const RIPPLE_SPEED = 6;
         const RIPPLE_DECAY = 0.02;
-        const MAX_RIPPLE_RADIUS = 600;
+        const MAX_RIPPLE_RADIUS = 900;
         const WAVE_WIDTH = 50;
 
         let width = window.innerWidth;
@@ -85,8 +85,13 @@ const RippleBackground = () => {
 
                     // Superposition of ripples
                     for (const ripple of ripplesRef.current) {
+                        // Quick bounding box check to avoid sqrt
+                        const influenceRange = ripple.radius + WAVE_WIDTH * 2;
                         const dx = x - ripple.x;
                         const dy = y - ripple.y;
+
+                        if (Math.abs(dx) > influenceRange || Math.abs(dy) > influenceRange) continue;
+
                         const distToCenter = Math.sqrt(dx * dx + dy * dy);
 
                         // Gaussian Pulse Function
@@ -109,9 +114,12 @@ const RippleBackground = () => {
                     // Clamp strength
                     activeStrength = Math.min(activeStrength, 2.0);
 
+                    // Skip drawing very faint dots if you want even more perf,
+                    // but we need base opacity here.
+
                     // Base state
-                    const baseOpacity = 0.15;
-                    const finalOpacity = Math.min(baseOpacity + (activeStrength * 0.6), 1);
+                    const baseOpacity = 0.12;
+                    const finalOpacity = Math.min(baseOpacity + (activeStrength * 0.4), 1);
 
                     // Zoom effect - smoother
                     const scale = 1.0 + (activeStrength * 0.4);
@@ -125,7 +133,7 @@ const RippleBackground = () => {
 
                     // Color mixing
                     if (activeStrength > 0.1) {
-                        ctx.fillStyle = `rgba(137, 167, 131, ${finalOpacity})`;
+                        ctx.fillStyle = `rgba(174, 198, 207, ${finalOpacity})`;
                     } else {
                         ctx.fillStyle = `rgba(255, 255, 255, ${finalOpacity})`;
                     }
